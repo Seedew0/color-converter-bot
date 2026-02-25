@@ -1,0 +1,6 @@
+__pycache__
+*.pyc
+.env
+.git
+README.md
+temp_colors
