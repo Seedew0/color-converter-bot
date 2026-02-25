@@ -7,6 +7,10 @@ from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont
+from aiohttp import web
+import asyncio
+import os
+import logging
 
 # Импортируем наши функции конвертации
 from colors import *
@@ -241,22 +245,51 @@ _Отправь другой HEX или RGB для новой конвертац
         )
 
 
-async def main():
-    """Запуск бота"""
+# ============= НОВАЯ ЧАСТЬ: ВЕБ-СЕРВЕР ДЛЯ RENDER =============
+
+async def health_check(request):
+    """Эндпоинт для проверки здоровья (Render его пингует)"""
+    return web.Response(text="OK")
+
+
+async def on_startup(app):
+    """Действия при запуске приложения"""
+    logging.info("Бот запускается...")
+    # Удаляем вебхук на всякий случай и запускаем polling
+    await bot.delete_webhook(drop_pending_updates=True)
+    asyncio.create_task(dp.start_polling(bot))
+    logging.info("Polling запущен в фоне")
+
+
+async def on_shutdown(app):
+    """Действия при остановке приложения"""
+    logging.info("Бот останавливается...")
+    await bot.session.close()
+
+
+def setup_app():
+    """Настройка веб-приложения"""
+    app = web.Application()
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
+    app.router.add_get('/health', health_check)
+    app.router.add_get('/', health_check)  # корневой маршрут тоже
+    return app
+
+
+# ============= ЗАПУСК =============
+
+if __name__ == "__main__":
     print("=" * 50)
     print("🎨 БОТ-КОНВЕРТЕР ЦВЕТОВ ЗАПУЩЕН!")
     print("=" * 50)
-    print("📝 Тестовые запросы:")
-    print("   • #FF5733")
-    print("   • 255, 87, 51")
-    print("   • red")
-    print("   • 0 255 0")
-    print("=" * 50)
-    print("Нажми Ctrl+C для остановки")
+    print("📝 Режим: Polling + Веб-сервер для Render")
+
+    # Получаем порт из переменной окружения (обязательно для Render)
+    port = int(os.environ.get('PORT', 10000))
+    print(f"🌐 Веб-сервер запускается на порту: {port}")
     print("=" * 50)
 
-    await dp.start_polling(bot)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    # Запускаем веб-сервер
+    app = setup_app()
+    web.run_app(app, host='0.0.0.0', port=port)
